@@ -8,6 +8,7 @@ import (
 type Context interface {
 	// Canvas
 	BackgroundStyle(style string)
+	Size(w, h float64)
 
 	// Context
 	LineWidth(w float64)
@@ -46,6 +47,8 @@ type Context interface {
 	Clear()
 	FillStroke()
 
+	TranslateCenter()
+
 	Circle(x, y, r float64)
 }
 
@@ -55,6 +58,10 @@ type context struct {
 
 func (c *context) BackgroundStyle(style string) {
 	c.command <- fmt.Sprintf("canvas.style.background='%s'", style)
+}
+
+func (c *context) Size(w, h float64) {
+	c.command <- fmt.Sprintf("canvas.width=%v;canvas.height=%v", w, h)
 }
 
 func (c *context) LineWidth(width float64) {
@@ -156,7 +163,11 @@ func (c *context) Restore() {
 // Convienience
 
 func (c *context) Clear() {
-	c.command <- fmt.Sprintf("context.save();context.setTransform();context.clearRect(0,0,canvas.width,canvas.height);context.restore()")
+	c.command <- "context.save();context.setTransform();context.clearRect(0,0,canvas.width,canvas.height);context.restore()"
+}
+
+func (c *context) TranslateCenter() {
+	c.command <- "context.translate(canvas.width/2,canvas.height/2)"
 }
 
 func (c *context) FillStroke() {
@@ -164,5 +175,5 @@ func (c *context) FillStroke() {
 }
 
 func (c *context) Circle(x, y, r float64) {
-	c.command <- fmt.Sprintf("context.arc(%v,%v,%v,0,2*math.PI)", x, y, r)
+	c.command <- fmt.Sprintf("context.arc(%v,%v,%v,0,2*Math.PI)", x, y, r)
 }

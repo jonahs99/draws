@@ -24,9 +24,7 @@ func New(app func(Context)) Canvas {
 }
 
 // Serve serves the html
-func (c *Canvas) Serve() {
-	addr := ":3000"
-
+func (c *Canvas) Serve(addr string) {
 	http.HandleFunc("/", c.home)
 	http.HandleFunc("/ws", c.ws)
 	http.ListenAndServe(addr, nil)
