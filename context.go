@@ -6,6 +6,10 @@ import (
 
 // Context has methods for commands
 type Context interface {
+	//Batch
+	Batch()
+	Draw()
+
 	// Canvas
 	BackgroundStyle(style string)
 	Size(w, h float64)
@@ -43,18 +47,33 @@ type Context interface {
 	Restore()
 
 	// Convieniece
-
 	Clear()
 	FillStroke()
-
 	TranslateCenter()
-
 	Circle(x, y, r float64)
+
+	// Mouse
+	WatchMouse()
+	MousePos() (float64, float64)
 }
 
 type context struct {
-	command chan string
+	command        chan string
+	event          chan string
+	mousex, mousey float64
 }
+
+// Batch
+
+func (c *context) Batch() {
+	c.command <- "BATCH"
+}
+
+func (c *context) Draw() {
+	c.command <- "DRAW"
+}
+
+// Context
 
 func (c *context) BackgroundStyle(style string) {
 	c.command <- fmt.Sprintf("canvas.style.background='%s'", style)
@@ -163,7 +182,7 @@ func (c *context) Restore() {
 // Convienience
 
 func (c *context) Clear() {
-	c.command <- "context.save();context.setTransform();context.clearRect(0,0,canvas.width,canvas.height);context.restore()"
+	c.command <- "context.save();context.resetTransform();context.clearRect(0,0,canvas.width,canvas.height);context.restore()"
 }
 
 func (c *context) TranslateCenter() {
@@ -176,4 +195,14 @@ func (c *context) FillStroke() {
 
 func (c *context) Circle(x, y, r float64) {
 	c.command <- fmt.Sprintf("context.arc(%v,%v,%v,0,2*Math.PI)", x, y, r)
+}
+
+// Mouse
+
+func (c *context) WatchMouse() {
+	c.command <- "sendMouseEvents()"
+}
+
+func (c *context) MousePos() (float64, float64) {
+	return c.mousex, c.mousey
 }
