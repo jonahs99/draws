@@ -6,7 +6,7 @@ import (
 	"github.com/jonahs99/draws"
 )
 
-func app(ctx draws.Context) {
+func app(ctx draws.Context, close <-chan struct{}) {
 	ctx.Size(200, 200)
 	ctx.BackgroundStyle("#eee")
 
@@ -32,6 +32,5 @@ func app(ctx draws.Context) {
 }
 
 func main() {
-	canvas := draws.New(app)
-	canvas.Serve(":3000")
+	draws.Serve(app, ":3000")
 }

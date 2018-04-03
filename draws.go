@@ -1,8 +1,6 @@
 package draws
 
 import (
-	"encoding/json"
-	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -10,56 +8,40 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Canvas is the interface type
-type Canvas struct {
-	App     func(Context)
-	open    chan bool
-	close   chan bool
-	started bool
-}
-
-// New returns a new canvas
-func New(app func(Context)) Canvas {
-	return Canvas{
-		App:   app,
-		open:  make(chan bool),
-		close: make(chan bool),
-	}
-}
+// App is the function the user should implement
+type App func(c Context, quit <-chan struct{})
 
 // Serve serves the html
-func (c *Canvas) Serve(addr string) {
-	http.HandleFunc("/", c.home)
-	http.HandleFunc("/ws", c.ws)
+func Serve(app App, addr string) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		homeTemplate.Execute(w, "ws://"+r.Host+"/ws")
+	})
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		con, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Print("upgrade:", err)
+			return
+		}
+
+		startApp(app, con)
+	})
 	http.ListenAndServe(addr, nil)
 }
 
-func (c *Canvas) home(w http.ResponseWriter, r *http.Request) {
-	homeTemplate.Execute(w, "ws://"+r.Host+"/ws")
-}
+func startApp(app App, con *websocket.Conn) {
+	c := &context{command: make(chan string), event: make(chan string)}
+	quit := make(chan struct{})
 
-func (c *Canvas) ws(w http.ResponseWriter, r *http.Request) {
-	if c.started {
-		return
-	}
-
-	con, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Print("upgrade:", err)
-		return
-	}
-
-	c.startApp(con)
-}
-
-func (c *Canvas) startApp(con *websocket.Conn) {
-	ctx := &context{command: make(chan string), event: make(chan string)}
+	con.SetCloseHandler(func(code int, text string) error {
+		close(quit)
+		return nil
+	})
 
 	go func() {
-		for com := range ctx.command {
+		for com := range c.command {
 			if com == "BATCH" {
 				batch := ""
-				for subcom := range ctx.command {
+				for subcom := range c.command {
 					if subcom == "DRAW" {
 						break
 					}
@@ -74,60 +56,7 @@ func (c *Canvas) startApp(con *websocket.Conn) {
 		}
 	}()
 
-	go func() {
-		for {
-			_, message, err := con.ReadMessage()
-			if err != nil {
-				log.Println("read:", err)
-			}
-
-			evt := event{}
-			err = json.Unmarshal(message, &evt)
-			if err != nil {
-				log.Println("unmarshal:", err)
-			}
-			ctx.mousex, ctx.mousey = evt.X, evt.Y
-		}
-	}()
-
-	con.SetCloseHandler(func(code int, text string) error {
-		fmt.Println("CLOSE")
-		return nil
-	})
-
-	c.started = true
-	c.App(ctx)
-}
-
-type event struct {
-	X, Y float64
-}
-
-func forward(con *websocket.Conn, ctx *context) {
-	go func() {
-		for com := range ctx.command {
-			fmt.Println("COMMAND: ", com)
-			err := con.WriteMessage(websocket.TextMessage, []byte(com))
-			if err != nil {
-				log.Println("write:", err)
-			}
-		}
-	}()
-	go func() {
-		for {
-			_, message, err := con.ReadMessage()
-			if err != nil {
-				log.Println("read:", err)
-			}
-
-			evt := event{}
-			err = json.Unmarshal(message, &evt)
-			if err != nil {
-				log.Println("unmarshal:", err)
-			}
-			ctx.mousex, ctx.mousey = evt.X, evt.Y
-		}
-	}()
+	app(c, quit)
 }
 
 var upgrader = websocket.Upgrader{} // use default options
@@ -142,28 +71,33 @@ var canvas = document.createElement("canvas")
 var context = canvas.getContext("2d")
 document.body.appendChild(canvas)
 
+var connectinterval
+
 window.addEventListener("load", function(evt) {
-	reconnect()
+	connect()
 })
 
-function reconnect() {
+function connect() {
 	ws = null
-	let connectinterval = setInterval(() => {
-		ws = new WebSocket("{{.}}")
-		ws.onopen = (evt) => {
-			clearInterval(connectinterval)
+	connectinterval = setInterval(reconnect, 1000);
+	reconnect()
+}
 
-			ws.onclose = function(evt) {
-				console.log("CLOSE")
-				reconnect()
-			}
-			ws.onmessage = function(evt) {
-				console.log("MESSAGE: ", evt.data)
-				eval(evt.data)
-			}
-			return false
+function reconnect() {
+	ws = new WebSocket("{{.}}")
+	ws.onopen = (evt) => {
+		clearInterval(connectinterval)
+
+		ws.onquit = function(evt) {
+			console.log("quit")
+			reconnect()
 		}
-	}, 1000)
+		ws.onmessage = function(evt) {
+			console.log("MESSAGE: ", evt.data)
+			eval(evt.data)
+		}
+		return false
+	}
 }
 
 function sendMouseEvents() {
