@@ -92,7 +92,7 @@ func (c *context) LineCap(style string) {
 }
 
 func (c *context) LineJoin(style string) {
-	c.command <- fmt.Sprintf("context.linJoin='%s'", style)
+	c.command <- fmt.Sprintf("context.lineJoin='%s'", style)
 }
 
 func (c *context) FillStyle(style string) {
